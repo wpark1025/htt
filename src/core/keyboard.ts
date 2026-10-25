@@ -141,3 +141,10 @@ export const MODIFIER_CODES = new Set([
   'Escape',
   'ContextMenu',
 ]);
+
+/** keydown 이벤트가 이 자판에서 만드는 글자. 글자 키가 아니면 null. */
+export function charForEvent(layout: Layout, e: { code: string; shiftKey: boolean }): string | null {
+  const kc = layout.keys[e.code];
+  if (!kc) return null;
+  return e.shiftKey && kc.shift ? kc.shift : kc.base;
+}
