@@ -29,9 +29,11 @@ export function renderVeniceMenu(opts: {
 }): View {
   const el = h('section', 'venice-menu');
   let sub: View | null = null;
-  const show = (view: View) => {
+  let kind: 'main' | 'sub' = 'main';
+  const show = (view: View, k: 'main' | 'sub' = 'sub') => {
     sub?.destroy();
     sub = view;
+    kind = k;
     el.replaceChildren(view.el);
   };
   const main = (): View => {
@@ -57,7 +59,7 @@ export function renderVeniceMenu(opts: {
       [1, 2, 3, 4, 5].map((n) => ({ label: `${t('venice.stageN', { n })} · ${t(`level.${n}` as 'level.1')}`, value: String(n) })),
       (v) => {
         opts.onLevel(Number(v) as LevelId);
-        show(main());
+        show(main(), 'main');
       },
       opts.level - 1,
     );
@@ -80,18 +82,15 @@ export function renderVeniceMenu(opts: {
     const body = h('div');
     body.appendChild(table);
     const btn = h('button', 'btn center', t('common.back'));
-    btn.addEventListener('click', () => show(main()));
+    btn.addEventListener('click', () => show(main(), 'main'));
     body.appendChild(btn);
-    const off = onKeys(
-      (e) => {
-        if (e.code === 'Enter' || e.code === 'Space') show(main());
-      },
-      () => show(main()),
-    );
+    const off = onKeys((e) => {
+      if (e.code === 'Enter' || e.code === 'Space') show(main(), 'main');
+    });
     return { el: dialog(t('venice.board'), body), destroy: off };
   };
-  show(main());
-  const off = onKeys(() => {}, opts.onExit);
+  show(main(), 'main');
+  const off = onKeys(() => {}, () => (kind === 'main' ? opts.onExit() : show(main(), 'main')));
   return {
     el,
     destroy() {

@@ -4,6 +4,7 @@ import type { I18nKey } from './ko';
 export const en: Record<I18nKey, string> = {
   'app.title': 'HTT Typing Tutor',
   'app.user': 'User',
+  'app.error': 'Error',
 
   'menu.home': 'Home',
   'menu.place': 'Key Drills',
@@ -112,6 +113,7 @@ export const en: Record<I18nKey, string> = {
   'onboard.greet':
     'Thank you for using this program. The typing tutor is designed to guide you toward hitting the right keys with the right fingers.\n\nAs the saying goes, old habits die hard. Once a bad habit sets in, it is difficult to fix. Rather than rushing, practice a little every day, about 30 minutes at a time. The clock in the top right corner will help you keep track.\n\nWhenever you want to stop, press the ESC key.',
   'onboard.askName': 'Please enter your name.',
+  'onboard.note': 'Records are kept per name on this device only. Press ESC at any time to return to the menu.',
   'onboard.nameHolder': 'Name',
   'onboard.skillTitle': 'Typing experience',
   'onboard.skillQ': 'How familiar are you with the keyboard?',

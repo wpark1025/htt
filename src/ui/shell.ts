@@ -84,7 +84,7 @@ export function buildMenus(lang: Lang): Menu[] {
 export interface Shell {
   el: HTMLElement;
   content: HTMLElement;
-  setHint(text: string): void;
+  setHint(text: string, isError?: boolean): void;
   setUser(name: string): void;
   setLang(lang: Lang): void;
   /** 메뉴 막대에 키보드 초점을 준다 (홈 화면에서) */
@@ -222,7 +222,10 @@ export function renderShell(opts: { lang: Lang; user: string; go(hash: string): 
   return {
     el,
     content,
-    setHint: (text) => (hint.textContent = text),
+    setHint(text, isError = false) {
+      hint.textContent = text;
+      hint.classList.toggle('error', isError);
+    },
     setUser: (name) => (userEl.textContent = name),
     setLang(lang) {
       langEl.textContent = t(`common.lang.${lang}` as I18nKey);

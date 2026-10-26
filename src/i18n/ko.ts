@@ -2,6 +2,7 @@
 export const ko = {
   'app.title': 'HTT 타자교사',
   'app.user': '사용자',
+  'app.error': '오류',
 
   // 메뉴
   'menu.home': '홈',
@@ -117,6 +118,7 @@ export const ko = {
   'onboard.greet':
     '이 프로그램을 써 주시니 고맙습니다. 타자교사는 글쇠를 올바로 익히는 데 길잡이가 되도록 꾸민 것입니다.\n\n세 살 버릇이 여든까지 간다고 했듯, 한 번 버릇이 잘못 들면 바로잡기 어렵습니다. 조바심을 내기보다 한 번에 30분 가량이라도 조금씩 꾸준히 익히는 것이 훨씬 중요합니다. 오른쪽 위의 시계가 시간을 재는 데 도움이 될 것입니다.\n\n언제 어디서든지 그만두고 싶을 때는 ESC 글쇠를 누르세요.',
   'onboard.askName': '이름을 입력하여 주세요.',
+  'onboard.note': '기록은 이름별로 이 기기에만 저장돼요. 언제든 ESC를 누르면 메뉴로 돌아가요.',
   'onboard.nameHolder': '이름',
   'onboard.skillTitle': '글쇠 익숙 정도',
   'onboard.skillQ': '글쇠에 대해 얼마만큼 익숙한가요?',

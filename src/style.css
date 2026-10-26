@@ -263,6 +263,10 @@ kbd {
   border-top: 1px solid var(--line);
   font-size: 0.95rem;
 }
+.hint.error {
+  color: var(--bad);
+  font-weight: 700;
+}
 .status-right {
   display: flex;
   gap: 14px;

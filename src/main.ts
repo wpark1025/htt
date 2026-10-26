@@ -145,16 +145,13 @@ function render(): void {
   if (!loadUsers().users.length) {
     active?.destroy();
     active = renderOnboarding({
-      onDone(where) {
+      onDone() {
         shell!.setUser(currentUser()?.name ?? '');
-        if (where === 'game') go('#/venice');
-        else if (where === 'place') go('#/place/1');
-        else home();
-        if (location.hash === '#/' || location.hash === '') render();
+        render();
       },
     });
     shell!.content.replaceChildren(active.el);
-    shell!.setHint(t('hint.space'));
+    shell!.setHint(t('onboard.askName'));
     shell!.focusMenu(false);
     return;
   }
@@ -166,4 +163,8 @@ applyTheme();
 shell = renderShell({ lang: settings.lang, user: currentUser()?.name ?? '', go });
 app.replaceChildren(shell.el);
 window.addEventListener('hashchange', render);
+// 예상 못 한 오류는 상태줄에 보여서 알릴 수 있게 한다
+const reportError = (msg: string) => shell?.setHint(`${t('app.error')}: ${msg}`, true);
+window.addEventListener('error', (e) => reportError(e.message));
+window.addEventListener('unhandledrejection', (e) => reportError(String(e.reason)));
 render();

@@ -2,7 +2,7 @@
 
 import { addUser, deleteUser, loadUsers, switchUser } from '../core/store';
 import { t } from '../i18n';
-import { choiceList, dialog, esc, h, onKeys, type View } from './common';
+import { dialog, esc, h, onKeys, type View } from './common';
 
 export function renderUsers(opts: { onChanged(): void; onExit(): void }): View {
   const el = h('section', 'practice users');
@@ -56,87 +56,23 @@ export function renderUsers(opts: { onChanged(): void; onExit(): void }): View {
   return { el, destroy: off };
 }
 
-/** 처음 시작 흐름. 끝나면 onDone(where)로 어디서 시작할지 알려준다. */
-export function renderOnboarding(opts: { onDone(where: 'game' | 'menu' | 'place'): void }): View {
+/** 처음 시작: 이름만 묻는다. 끝나면 onDone. */
+export function renderOnboarding(opts: { onDone(): void }): View {
   const el = h('section', 'onboarding');
-  let sub: View | null = null;
-  const show = (v: View) => {
-    sub?.destroy();
-    sub = v;
-    const overlay = h('div', 'overlay');
-    overlay.appendChild(v.el);
-    el.replaceChildren(overlay);
-  };
-
-  const greet = (): View => {
-    const body = h('div', 'prose');
-    body.innerHTML = t('onboard.greet')
-      .split('\n\n')
-      .map((p) => `<p>${esc(p)}</p>`)
-      .join('');
-    body.appendChild(h('p', 'muted center', t('hint.space')));
-    const off = onKeys((e) => {
-      if (e.code === 'Space' || e.code === 'Enter') {
-        e.preventDefault();
-        show(askName());
-      }
-    });
-    return { el: dialog(t('onboard.greetTitle'), body), destroy: off };
-  };
-
-  const askName = (): View => {
-    const body = h('div', 'center');
-    body.innerHTML = `<p>${t('onboard.askName')}</p><form class="name-form"><input type="text" maxlength="20" placeholder="${t('onboard.nameHolder')}" autofocus required></form>`;
-    const form = body.querySelector('form')!;
-    const input = body.querySelector<HTMLInputElement>('input')!;
-    form.addEventListener('submit', (e) => {
-      e.preventDefault();
-      const name = input.value.trim();
-      if (!name) return;
-      addUser(name);
-      show(askSkill(name));
-    });
-    setTimeout(() => input.focus(), 0);
-    return { el: dialog(t('common.name'), body), destroy() {} };
-  };
-
-  const askSkill = (name: string): View => {
-    const list = choiceList(
-      [
-        { label: t('onboard.skillNew'), value: 'new' },
-        { label: t('onboard.skillSome'), value: 'some' },
-      ],
-      (v) => {
-        addUser(name, v as 'new' | 'some');
-        show(askWhere());
-      },
-    );
-    const body = h('div');
-    body.appendChild(h('p', 'center', t('onboard.skillQ')));
-    body.appendChild(list.el);
-    return { el: dialog(t('onboard.skillTitle'), body), destroy: list.destroy };
-  };
-
-  const askWhere = (): View => {
-    const list = choiceList(
-      [
-        { label: t('onboard.wherePlace'), value: 'place' },
-        { label: t('onboard.whereGame'), value: 'game' },
-        { label: t('onboard.whereMenu'), value: 'menu' },
-      ],
-      (v) => opts.onDone(v as 'game' | 'menu' | 'place'),
-    );
-    const body = h('div');
-    body.appendChild(h('p', 'center', t('onboard.whereQ')));
-    body.appendChild(list.el);
-    return { el: dialog(t('onboard.whereTitle'), body), destroy: list.destroy };
-  };
-
-  show(greet());
-  return {
-    el,
-    destroy() {
-      sub?.destroy();
-    },
-  };
+  const body = h('div', 'center');
+  body.innerHTML = `<p>${esc(t('onboard.askName'))}</p><form class="name-form"><input type="text" maxlength="20" placeholder="${esc(t('onboard.nameHolder'))}" autofocus required></form><p class="muted">${esc(t('onboard.note'))}</p>`;
+  const form = body.querySelector('form')!;
+  const input = body.querySelector<HTMLInputElement>('input')!;
+  form.addEventListener('submit', (e) => {
+    e.preventDefault();
+    const name = input.value.trim();
+    if (!name) return;
+    addUser(name);
+    opts.onDone();
+  });
+  setTimeout(() => input.focus(), 0);
+  const overlay = h('div', 'overlay');
+  overlay.appendChild(dialog(t('app.title'), body));
+  el.appendChild(overlay);
+  return { el, destroy() {} };
 }

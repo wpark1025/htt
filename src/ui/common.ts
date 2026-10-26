@@ -197,5 +197,12 @@ export function confirmLeave(onContinue: () => void, onLeave: () => void): View 
   );
   const el = h('div', 'overlay');
   el.appendChild(dialog('', list.el, 'dialog-small'));
-  return { el, destroy: list.destroy };
+  const off = onKeys(() => {}, onLeave);
+  return {
+    el,
+    destroy() {
+      list.destroy();
+      off();
+    },
+  };
 }

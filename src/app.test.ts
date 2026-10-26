@@ -31,18 +31,11 @@ describe('app', () => {
     await import('./main');
   });
 
-  it('처음엔 인사말 → 이름 → 익숙 정도 → 시작할 곳', () => {
-    expect($('.dialog-title').textContent).toContain('인사말');
-    press('Space');
+  it('처음엔 이름만 묻고 바로 홈', () => {
+    expect($('.name-form input')).toBeTruthy();
     const input = $('.name-form input') as HTMLInputElement;
     input.value = '테스트';
     $('.name-form').dispatchEvent(new Event('submit', { cancelable: true }));
-    expect($('.dialog-title').textContent).toContain('글쇠 익숙 정도');
-    press('Enter');
-    expect($('.dialog-title').textContent).toContain('작업 선택');
-    press('ArrowDown');
-    press('ArrowDown');
-    press('Enter'); // 메뉴에서 시작
     expect($('.status-user').textContent).toBe('테스트');
     expect(document.querySelectorAll('.menubar .menu').length).toBe(7);
     expect($('.home')).toBeTruthy();
@@ -95,7 +88,12 @@ describe('app', () => {
     expect($('.result')).toBeTruthy();
   });
 
-  it('단문 연습: Enter로 넘어가고 결과가 남는다', () => {
+  it('단문 연습: ESC 두 번이면 메뉴로, Enter로 넘어가고 결과가 남는다', () => {
+    goto('#/short');
+    press('Escape');
+    expect(document.querySelector('.overlay')).toBeTruthy();
+    press('Escape');
+    expect(location.hash).toBe('#/');
     goto('#/short');
     for (let i = 0; i < 10; i++) {
       const line = $('.line.active .line-target').textContent!.replace(/ /g, ' ');
