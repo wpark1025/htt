@@ -1,43 +1,57 @@
 import './style.css';
 import type { Layout } from './core/keyboard';
 import { loadSettings, saveSettings, type Lang, type LevelId, type Settings } from './core/settings';
-import { pickWords, poolFor } from './core/words';
+import { currentUser, loadUsers } from './core/store';
+import { poolFor } from './core/words';
 import { EN_LAYOUT } from './data/en/layout';
 import { EN_WORDS } from './data/en/words';
 import { KO_LAYOUT } from './data/ko/layout';
 import { KO_WORDS } from './data/ko/words';
-import { LEVELS, levelById } from './data/levels';
+import { STAGES } from './data/stages';
 import type { WordEntry } from './data/words';
-import { ZONES } from './data/zones';
+import { setUiLang, t } from './i18n';
+import type { View } from './ui/common';
+import { renderHelp, type HelpKind } from './ui/help';
 import { renderHome } from './ui/home';
-import { renderPlacePractice, type PracticeHandle } from './ui/place-practice';
-import { renderRainGame } from './ui/rain-game';
+import { renderLongPractice, renderTextChooser, TEXTS } from './ui/long-practice';
+import { renderPad } from './ui/pad';
+import { renderPlacePractice } from './ui/place-practice';
+import { PUZZLES, renderPuzzle, renderPuzzleChooser } from './ui/puzzle';
+import { renderSentencePractice } from './ui/sentence-practice';
+import { renderSettings } from './ui/settings-view';
+import { renderShell, type Shell } from './ui/shell';
+import { renderStats, type StatsKind } from './ui/stats';
+import { renderStory } from './ui/story';
+import { renderOnboarding, renderUsers } from './ui/users';
+import { renderVenice, renderVeniceMenu } from './ui/venice';
 import { renderWordPractice } from './ui/word-practice';
+import { renderExamResults } from './ui/exam-results';
 
 const layouts: Record<Lang, Layout> = { ko: KO_LAYOUT, en: EN_LAYOUT };
 const words: Record<Lang, WordEntry[]> = { ko: KO_WORDS, en: EN_WORDS };
 const app = document.querySelector<HTMLDivElement>('#app')!;
 
 let settings: Settings = loadSettings();
-let active: PracticeHandle | null = null;
+let active: View | null = null;
+let shell: Shell | null = null;
 
-type Route =
-  | { name: 'home' }
-  | { name: 'place'; lang: Lang; zone: number }
-  | { name: 'word'; lang: Lang; level: LevelId }
-  | { name: 'rain'; lang: Lang; level: LevelId };
+function applyTheme(): void {
+  document.documentElement.dataset.theme = settings.theme;
+}
 
-function parseRoute(): Route {
-  const m = location.hash.match(/^#\/(place|word|rain)\/(ko|en)\/(\d+)$/);
-  if (!m) return { name: 'home' };
-  const lang = m[2] as Lang;
-  const n = Number(m[3]);
-  if (m[1] === 'place') {
-    if (ZONES.some((z) => z.id === n)) return { name: 'place', lang, zone: n };
-  } else if (LEVELS.some((l) => l.id === n)) {
-    return { name: m[1] as 'word' | 'rain', lang, level: n as LevelId };
+function update(patch: Partial<Settings>): void {
+  const before = settings;
+  settings = { ...settings, ...patch };
+  saveSettings(settings);
+  if (patch.uiLang && patch.uiLang !== before.uiLang) {
+    setUiLang(settings.uiLang);
+    shell?.rebuild(settings.lang);
   }
-  return { name: 'home' };
+  if (patch.lang && patch.lang !== before.lang) {
+    shell?.rebuild(settings.lang);
+    shell?.setLang(settings.lang);
+  }
+  if (patch.theme) applyTheme();
 }
 
 function go(hash: string): void {
@@ -45,77 +59,111 @@ function go(hash: string): void {
   else location.hash = hash;
 }
 
-const pool = (lang: Lang, level: LevelId) => poolFor(words[lang], lang, layouts[lang], level);
+const home = () => go('#/');
+const lang = () => settings.lang;
+const layout = () => layouts[settings.lang];
+const pool = (level: LevelId) => poolFor(words[lang()], lang(), layout(), level);
 
-function render(): void {
+function mount(view: View, hint: string, menuFocus = false): void {
   active?.destroy();
-  active = null;
-  app.replaceChildren();
-
-  const route = parseRoute();
-  if (route.name === 'home') {
-    app.appendChild(
-      renderHome({
-        settings,
-        layouts,
-        pool: pool(settings.lang, settings.level),
-        onChange(patch) {
-          settings = { ...settings, ...patch };
-          saveSettings(settings);
-          render();
-        },
-        onStart(target) {
-          if (target === 'word') go(`#/word/${settings.lang}/${settings.level}`);
-          else if (target === 'rain') go(`#/rain/${settings.lang}/${settings.level}`);
-          else go(`#/place/${settings.lang}/${target.zone}`);
-        },
-      }),
-    );
-    return;
-  }
-
-  if (route.name === 'place') {
-    const zone = ZONES.find((z) => z.id === route.zone)!;
-    const nextZone = ZONES.find((z) => z.id === route.zone + 1);
-    active = renderPlacePractice({
-      zone,
-      lang: route.lang,
-      layout: layouts[route.lang],
-      settings,
-      onExit: () => go('#/'),
-      onRetry: () => render(),
-      onNext: () => (nextZone ? go(`#/place/${route.lang}/${nextZone.id}`) : go('#/')),
-    });
-  } else if (route.name === 'word') {
-    const level = levelById(route.level);
-    active = renderWordPractice({
-      lang: route.lang,
-      layout: layouts[route.lang],
-      level,
-      words: pickWords(pool(route.lang, route.level), settings.wordCount),
-      settings,
-      onExit: () => go('#/'),
-      onRetry: () => render(),
-      onNext: () => {
-        const next = Math.min(5, route.level + 1) as LevelId;
-        settings = { ...settings, level: next };
-        saveSettings(settings);
-        go(`#/word/${route.lang}/${next}`);
-      },
-    });
-  } else {
-    active = renderRainGame({
-      lang: route.lang,
-      layout: layouts[route.lang],
-      level: levelById(route.level),
-      pool: pool(route.lang, route.level),
-      settings,
-      onExit: () => go('#/'),
-      onRetry: () => render(),
-    });
-  }
-  app.appendChild(active.el);
+  active = view;
+  shell!.content.replaceChildren(view.el);
+  shell!.setHint(hint);
+  shell!.focusMenu(menuFocus);
+  window.scrollTo(0, 0);
 }
 
+function route(): void {
+  const hsh = location.hash || '#/';
+  const seg = hsh.replace(/^#\//, '').split('/').filter(Boolean);
+  const [a, b] = seg;
+  const n = Number(b);
+  const L = lang();
+  const LY = layout();
+  const stageOk = (x: number) => STAGES[L].some((s) => s.id === x);
+
+  if (a === 'place' && stageOk(n)) {
+    return mount(
+      renderPlacePractice({ stage: n, lang: L, layout: LY, settings, onExit: home, onRetry: render, onNext: () => go(`#/place/${Math.min(10, n + 1)}`) }),
+      t('hint.pressKey'),
+    );
+  }
+  if (a === 'words' && stageOk(n)) {
+    return mount(
+      renderWordPractice({ stage: n, lang: L, layout: LY, settings, onExit: home, onRetry: render, onNext: () => go(`#/words/${Math.min(10, n + 1)}`) }),
+      t('hint.typeWords'),
+    );
+  }
+  if (a === 'short') return mount(renderSentencePractice({ lang: L, layout: LY, settings, onExit: home, onRetry: render }), t('hint.typeLine'));
+  if (a === 'long' || a === 'exam') {
+    const exam = a === 'exam';
+    const text = b ? TEXTS[L].find((x) => x.id === b) : undefined;
+    if (!text) return mount(renderTextChooser({ lang: L, exam, onPick: (id) => go(`#/${a}/${id}`) }), t('hint.menu'));
+    return mount(renderLongPractice({ text, lang: L, layout: LY, settings, exam, onExit: home, onRetry: render }), t('hint.typeLine'));
+  }
+  if (a === 'exam-results') return mount(renderExamResults({ lang: L, onExit: home }), t('hint.esc'));
+  if (a === 'pad') return mount(renderPad({ lang: L, layout: LY, onExit: home }), t('hint.pad'));
+  if (a === 'venice') {
+    if (b === 'play') {
+      return mount(
+        renderVenice({ lang: L, layout: LY, level: settings.level, pool: pool(settings.level), settings, onExit: () => go('#/venice'), onRetry: render }),
+        t('hint.venice'),
+      );
+    }
+    return mount(
+      renderVeniceMenu({ lang: L, level: settings.level, onStart: () => go('#/venice/play'), onLevel: (level) => update({ level }), onExit: home }),
+      t('hint.menu'),
+    );
+  }
+  if (a === 'story') return mount(renderStory({ onExit: home }), t('hint.esc'));
+  if (a === 'puzzle') {
+    const p = PUZZLES[L].find((x) => x.id === n);
+    if (!p) return mount(renderPuzzleChooser({ lang: L, onPick: (id) => go(`#/puzzle/${id}`) }), t('hint.menu'));
+    return mount(renderPuzzle({ puzzle: p, lang: L, layout: LY, settings, onExit: home, onRetry: render }), t('hint.puzzle'));
+  }
+  if (a === 'stats') return mount(renderStats({ kind: (b as StatsKind) || 'progress', lang: L, onExit: home }), t('hint.esc'));
+  if (a === 'help') return mount(renderHelp({ kind: (b as HelpKind) || 'about', layout: LY, onExit: home }), t('hint.space'));
+  if (a === 'settings') return mount(renderSettings({ settings, onChange: update, onExit: home }), t('hint.esc'));
+  if (a === 'users') {
+    return mount(
+      renderUsers({
+        onChanged: () => shell!.setUser(currentUser()?.name ?? ''),
+        onExit: home,
+      }),
+      t('hint.esc'),
+    );
+  }
+  if (a === 'theme') {
+    const order: Settings['theme'][] = ['light', 'dark', 'retro'];
+    update({ theme: order[(order.indexOf(settings.theme) + 1) % order.length] });
+    return home();
+  }
+  mount(renderHome({ settings, user: currentUser()?.name ?? '', onLang: (l) => { update({ lang: l }); render(); }, go }), t('hint.menu'), true);
+}
+
+function render(): void {
+  if (!loadUsers().users.length) {
+    active?.destroy();
+    active = renderOnboarding({
+      onDone(where) {
+        shell!.setUser(currentUser()?.name ?? '');
+        if (where === 'game') go('#/venice');
+        else if (where === 'place') go('#/place/1');
+        else home();
+        if (location.hash === '#/' || location.hash === '') render();
+      },
+    });
+    shell!.content.replaceChildren(active.el);
+    shell!.setHint(t('hint.space'));
+    shell!.focusMenu(false);
+    return;
+  }
+  route();
+}
+
+setUiLang(settings.uiLang);
+applyTheme();
+shell = renderShell({ lang: settings.lang, user: currentUser()?.name ?? '', go });
+app.replaceChildren(shell.el);
 window.addEventListener('hashchange', render);
 render();

@@ -85,3 +85,29 @@ export function renderFingerLegend(): HTMLElement {
   }
   return el;
 }
+
+/** 손가락 표시: 자판 아래 삼각형 8개. 칠 손가락이 채워진다 (원작의 ▲). */
+export interface FingerView {
+  el: HTMLElement;
+  set(finger: Finger | null): void;
+}
+
+export function renderFingers(): FingerView {
+  const el = document.createElement('div');
+  el.className = 'fingers';
+  const order: Finger[] = ['LP', 'LR', 'LM', 'LI', 'TH', 'RI', 'RM', 'RR', 'RP'];
+  const els = new Map<Finger, HTMLElement>();
+  for (const f of order) {
+    const d = document.createElement('div');
+    d.className = `finger finger-${f}`;
+    d.title = FINGER_NAME[f];
+    els.set(f, d);
+    el.appendChild(d);
+  }
+  return {
+    el,
+    set(finger) {
+      for (const [f, d] of els) d.classList.toggle('on', f === finger);
+    },
+  };
+}

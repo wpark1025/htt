@@ -21,3 +21,10 @@
 
 ## 명령
 - `npm run dev`, `npm run build` (tsc 포함), `npm run preview`
+
+## 구조 (2026-10-25 개편)
+- 기능은 한메타자교사 3.05를 따른다 (`docs/modules.md` 7절). 겉모습만 현대적.
+- 앱 언어(`settings.uiLang`)와 연습 자판(`settings.lang`)은 별개. UI 문자열은 전부 `src/i18n/ko.ts`·`en.ts`를 거친다 (키 집합이 같아야 하며 테스트가 확인).
+- 단계는 `src/data/stages.ts`(10단계, 언어별 새 글쇠). 낱말익힘은 `src/core/stage-words.ts`가 배운 글쇠로 걸러 뽑는다.
+- 화면 틀(제목줄·메뉴 막대·상태줄)은 `src/ui/shell.ts`. 각 화면은 `{ el, destroy() }`를 돌려주는 함수.
+- 받아쓰기 한 줄은 `src/ui/line-typer.ts` 하나로 낱말·단문·장문·검정이 공유한다.

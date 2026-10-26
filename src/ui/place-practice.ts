@@ -1,60 +1,50 @@
-// 자리 연습 화면. 구역의 키를 무작위로 보여주고 물리 키 입력을 채점한다.
+// 자리익힘. 단계의 글쇠를 상자에 하나씩 보여주고 물리 키를 채점한다.
 
-import { MODIFIER_CODES, shiftCodeFor, type Layout } from '../core/keyboard';
-import { appendHistory, type Lang, type Settings } from '../core/settings';
-import { sfx } from '../core/sound';
-import { shiftCodesFor, type Zone } from '../data/zones';
-import { renderFingerLegend, renderKeyboard } from './keyboard';
+import { charForEvent, FINGER_OF, MODIFIER_CODES, shiftCodeFor, type Layout } from '../core/keyboard';
+import type { Lang, Settings } from '../core/settings';
+import { appendHistory, KeySampler, mergeKeyStats } from '../core/store';
+import { stageById, stageChars, type StageKey } from '../data/stages';
+import { stageName, t } from '../i18n';
+import { accuracyOf, esc, h, kpmOf, onKeys, play, resultCard, type View } from './common';
+import { renderFingers, renderKeyboard } from './keyboard';
 
-interface Target {
-  code: string;
-  shift: boolean;
+interface Target extends StageKey {
   label: string;
 }
 
-function buildTargets(zone: Zone, lang: Lang, layout: Layout, settings: Settings): Target[] {
-  const pool: Target[] = [];
-  for (const code of zone.codes) {
-    const chars = layout.keys[code];
-    if (!chars) continue;
-    pool.push({ code, shift: false, label: chars.base });
-  }
-  if (settings.shift) {
-    for (const code of shiftCodesFor(zone, lang)) {
-      const chars = layout.keys[code];
-      if (chars?.shift) pool.push({ code, shift: true, label: chars.shift });
-    }
-  }
+function buildTargets(lang: Lang, layout: Layout, stage: number, count: number): Target[] {
+  const toTarget = (k: StageKey): Target | null => {
+    const kc = layout.keys[k.code];
+    const label = k.shift ? kc?.shift : kc?.base;
+    return label ? { ...k, label } : null;
+  };
+  const main = stageById(lang, stage).keys.map(toTarget).filter((x): x is Target => x !== null);
+  const review: Target[] = [];
+  for (let s = 1; s < stage; s++) review.push(...stageById(lang, s).keys.map(toTarget).filter((x): x is Target => x !== null));
   const out: Target[] = [];
   let last: Target | null = null;
-  for (let i = 0; i < settings.count; i++) {
-    let pick: Target;
-    let guard = 0;
-    do {
-      pick = pool[Math.floor(Math.random() * pool.length)];
-    } while (pool.length > 1 && pick === last && guard++ < 10);
+  for (let i = 0; i < count; i++) {
+    const pool = review.length && Math.random() < 0.2 ? review : main;
+    let pick = pool[Math.floor(Math.random() * pool.length)];
+    for (let g = 0; g < 8 && pool.length > 1 && last && pick.label === last.label; g++) pick = pool[Math.floor(Math.random() * pool.length)];
     out.push(pick);
     last = pick;
   }
   return out;
 }
 
-export interface PracticeHandle {
-  el: HTMLElement;
-  destroy(): void;
-}
-
 export function renderPlacePractice(opts: {
-  zone: Zone;
+  stage: number;
   lang: Lang;
   layout: Layout;
   settings: Settings;
   onExit(): void;
   onNext(): void;
   onRetry(): void;
-}): PracticeHandle {
-  const { zone, lang, layout, settings } = opts;
-  const targets = buildTargets(zone, lang, layout, settings);
+}): View {
+  const { stage, lang, layout, settings } = opts;
+  const targets = buildTargets(lang, layout, stage, settings.count);
+  const sampler = new KeySampler();
   let idx = 0;
   let correct = 0;
   let wrong = 0;
@@ -62,108 +52,76 @@ export function renderPlacePractice(opts: {
   let finished = false;
   const missByLabel = new Map<string, number>();
 
-  const el = document.createElement('section');
-  el.className = 'practice';
+  const el = h('section', 'practice place');
   el.innerHTML = `
     <header class="practice-top">
-      <button class="btn btn-ghost" data-act="exit">← 돌아가기</button>
-      <h2>${zone.id}. ${zone.name[lang]}</h2>
+      <h2>${esc(t('place.title', { stage: stageName(lang, stage) }))}</h2>
+      <div class="learned">${t('place.learned')}: ${stageChars(lang, layout, stage).map((c) => `<kbd>${esc(c)}</kbd>`).join('')}</div>
       <div class="stats">
         <span><b data-stat="progress">0</b> / ${targets.length}</span>
-        <span>정확도 <b data-stat="acc">100</b>%</span>
+        <span>${t('common.accuracy')} <b data-stat="acc">100</b>%</span>
       </div>
     </header>
-    <div class="target-area">
-      <div class="target-now" aria-live="polite"></div>
-      <div class="target-next"></div>
-    </div>
+    <div class="target-area"><div class="target-box"><span class="target-now" aria-live="polite"></span></div></div>
   `;
-
   const kb = renderKeyboard(layout);
-  el.appendChild(kb.el);
-  el.appendChild(renderFingerLegend());
+  const fingers = renderFingers();
+  el.append(kb.el, fingers.el);
 
   const nowEl = el.querySelector<HTMLElement>('.target-now')!;
-  const nextEl = el.querySelector<HTMLElement>('.target-next')!;
+  const boxEl = el.querySelector<HTMLElement>('.target-box')!;
   const progEl = el.querySelector<HTMLElement>('[data-stat="progress"]')!;
   const accEl = el.querySelector<HTMLElement>('[data-stat="acc"]')!;
 
-  el.querySelector('[data-act="exit"]')!.addEventListener('click', () => opts.onExit());
-
   function show(): void {
-    const t = targets[idx];
-    if (!t) return;
-    nowEl.textContent = t.label;
-    nowEl.classList.toggle('needs-shift', t.shift);
-    nextEl.innerHTML = targets
-      .slice(idx + 1, idx + 9)
-      .map((n) => `<span>${n.label}</span>`)
-      .join('');
-    kb.setTarget(t.code, t.shift ? shiftCodeFor(t.code) : null);
+    const tg = targets[idx];
+    if (!tg) return;
+    nowEl.textContent = tg.label;
+    boxEl.classList.toggle('needs-shift', Boolean(tg.shift));
+    kb.setTarget(tg.code, tg.shift ? shiftCodeFor(tg.code) : null);
+    fingers.set(FINGER_OF[tg.code] ?? null);
     progEl.textContent = String(idx);
-    const total = correct + wrong;
-    accEl.textContent = total ? String(Math.round((correct / total) * 100)) : '100';
+    accEl.textContent = String(Math.round(accuracyOf(correct, wrong)));
+    sampler.mark();
   }
 
   function finish(): void {
     finished = true;
     const ms = Math.max(1, Date.now() - startedAt);
-    const total = correct + wrong;
-    const accuracy = total ? Math.round((correct / total) * 1000) / 10 : 100;
-    const kpm = Math.round((correct / ms) * 60000);
-    appendHistory({ ts: Date.now(), lang, zone: zone.id, count: targets.length, correct, wrong, ms, kpm, accuracy });
-    if (settings.sound) sfx.done();
+    const accuracy = accuracyOf(correct, wrong);
+    const kpm = kpmOf(correct, ms);
+    appendHistory({ lang, mode: 'place', key: stage, count: targets.length, correct, wrong, ms, kpm, accuracy });
+    mergeKeyStats(lang, sampler.samples);
+    play(settings.sound, 'done');
     kb.setTarget(null);
-
+    fingers.set(null);
     const worst = [...missByLabel.entries()].sort((a, b) => b[1] - a[1]).slice(0, 5);
-    const result = document.createElement('div');
-    result.className = 'result';
-    result.innerHTML = `
-      <h3>${accuracy >= 95 ? '아주 잘했어요!' : accuracy >= 80 ? '잘했어요!' : '조금 더 연습해요'}</h3>
-      <div class="result-grid">
-        <div><span class="big">${accuracy}%</span><span>정확도</span></div>
-        <div><span class="big">${kpm}</span><span>타/분</span></div>
-        <div><span class="big">${Math.round(ms / 1000)}초</span><span>걸린 시간</span></div>
-      </div>
-      ${
-        worst.length
-          ? `<p class="muted">자주 틀린 글자: ${worst.map(([l, n]) => `<b>${l}</b> ${n}번`).join(', ')}</p>`
-          : '<p class="muted">한 번도 틀리지 않았어요.</p>'
-      }
-      <div class="result-actions">
-        <button class="btn" data-act="retry">다시 하기</button>
-        <button class="btn btn-primary" data-act="next">다음 자리 →</button>
-        <button class="btn btn-ghost" data-act="exit">처음으로</button>
-      </div>
-    `;
-    result.querySelector('[data-act="retry"]')!.addEventListener('click', () => opts.onRetry());
-    result.querySelector('[data-act="next"]')!.addEventListener('click', () => opts.onNext());
-    result.querySelector('[data-act="exit"]')!.addEventListener('click', () => opts.onExit());
+    const result = resultCard({
+      accuracy,
+      kpm,
+      ms,
+      missed: worst,
+      buttons: [
+        { label: t('common.retry'), onClick: opts.onRetry },
+        ...(stage < 10 ? [{ label: t('result.nextStage'), primary: true, onClick: opts.onNext }] : []),
+        { label: t('common.toMenu'), onClick: opts.onExit },
+      ],
+    });
     el.querySelector('.target-area')!.replaceWith(result);
     progEl.textContent = String(targets.length);
   }
 
-  function onKey(e: KeyboardEvent): void {
-    if (finished) return;
-    if (e.ctrlKey || e.metaKey || e.altKey) return;
-    if (e.repeat) return;
-    if (!e.code || MODIFIER_CODES.has(e.code)) return;
-    if (e.code === 'Escape') {
-      opts.onExit();
-      return;
-    }
+  const off = onKeys((e) => {
+    if (finished || e.repeat || !e.code || MODIFIER_CODES.has(e.code)) return;
+    const tg = targets[idx];
+    const ch = charForEvent(layout, e);
+    if (ch === null) return;
     e.preventDefault();
     if (!startedAt) startedAt = Date.now();
-
-    const t = targets[idx];
-    const chars = layout.keys[t.code];
-    // 이 키에 Shift 글자가 없으면 Shift 여부는 따지지 않는다 (입문자 배려)
-    const shiftMatters = Boolean(chars?.shift);
-    const ok = e.code === t.code && (!shiftMatters || e.shiftKey === t.shift);
-
+    const ok = ch === tg.label;
     kb.flash(e.code, ok);
-    if (settings.sound) (ok ? sfx.hit : sfx.miss)();
-
+    play(settings.sound, ok ? 'hit' : 'miss');
+    sampler.record(tg.label, ok);
     if (ok) {
       correct++;
       idx++;
@@ -171,21 +129,14 @@ export function renderPlacePractice(opts: {
       else show();
     } else {
       wrong++;
-      missByLabel.set(t.label, (missByLabel.get(t.label) ?? 0) + 1);
-      nowEl.classList.remove('shake');
-      void nowEl.offsetWidth;
-      nowEl.classList.add('shake');
+      missByLabel.set(tg.label, (missByLabel.get(tg.label) ?? 0) + 1);
+      boxEl.classList.remove('shake');
+      void boxEl.offsetWidth;
+      boxEl.classList.add('shake');
       show();
     }
-  }
+  }, opts.onExit);
 
-  window.addEventListener('keydown', onKey);
   show();
-
-  return {
-    el,
-    destroy() {
-      window.removeEventListener('keydown', onKey);
-    },
-  };
+  return { el, destroy: off };
 }
